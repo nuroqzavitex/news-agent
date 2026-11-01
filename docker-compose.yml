@@ -65,6 +65,15 @@ services:
     <<: *backend
     command: ["python", "-m", "app.workers.scheduler"]
 
+  frontend:
+    build: ./frontend
+    environment:
+      API_INTERNAL_URL: http://agent-api:8008
+    ports: ["3000:3000"]
+    restart: unless-stopped
+    depends_on:
+      agent-api: {condition: service_healthy}
+
 volumes:
   pgdata:
   redisdata:

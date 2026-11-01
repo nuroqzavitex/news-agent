@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import get_state
 from app.db.models import Article, Source
@@ -103,3 +103,44 @@ async def trigger_crawl(body: CrawlTrigger, state: AppState = Depends(get_state)
     for code in codes:
         await enqueue_crawl(state.redis, code)
     return {"enqueued": list(codes)}
+
+
+class SourceActivity(BaseModel):
+    code: str
+    name: str
+    counts: list[int]
+    partial: list[int]
+    last_crawled_at: datetime | None
+    last_status: str | None
+
+
+class CrawlGrid(BaseModel):
+    hours: list[datetime]
+    sources: list[SourceActivity]
+
+
+@router.get("/stats/crawl-grid", response_model=CrawlGrid)
+async def crawl_grid(hours: int = Query(default=24, ge=1, le=168), state: AppState = Depends(get_state)) -> CrawlGrid:
+    """Articles stored per source per hour (by crawled_at), oldest hour first."""
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    buckets = [end - timedelta(hours=hours - 1 - i) for i in range(hours)]
+    index = {b: i for i, b in enumerate(buckets)}
+    hour = func.date_trunc("hour", Article.crawled_at).label("hour")
+    async with state.sessions() as s:
+        sources = (await s.scalars(select(Source).order_by(Source.code))).all()
+        rows = (await s.execute(
+            select(Article.source_id, hour, func.count(), func.count().filter(Article.status == "partial"))
+            .where(Article.crawled_at >= buckets[0])
+            .group_by(Article.source_id, hour)
+        )).all()
+    activity = {
+        src.id: SourceActivity(code=src.code, name=src.name, counts=[0] * hours, partial=[0] * hours,
+                               last_crawled_at=src.last_crawled_at, last_status=src.last_status)
+        for src in sources
+    }
+    for source_id, bucket, total, partial in rows:
+        i = index.get(bucket.astimezone(UTC))
+        if i is not None and source_id in activity:
+            activity[source_id].counts[i] = total
+            activity[source_id].partial[i] = partial
+    return CrawlGrid(hours=buckets, sources=list(activity.values()))

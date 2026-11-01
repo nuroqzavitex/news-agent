@@ -29,3 +29,9 @@ def test_canonical_url_drops_tracking_and_fragment():
 def test_strip_html():
     raw = '<a href="x"><img src="y"/></a></br>Giá vàng &amp; USD   tăng'
     assert strip_html(raw) == "Giá vàng & USD tăng"
+
+
+def test_normalize_paragraphs_keeps_breaks_and_collapses_spaces():
+    from app.services.textproc import normalize_paragraphs
+
+    assert normalize_paragraphs("Đoạn  một\n\n  Đoạn\thai \n") == "Đoạn một\nĐoạn hai"

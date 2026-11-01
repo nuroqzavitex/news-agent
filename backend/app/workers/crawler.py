@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import calendar
+import email.utils
 import logging
-from datetime import UTC, datetime
+import re
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import feedparser
@@ -26,6 +28,7 @@ from app.workers.streams import STREAM_CRAWL_JOBS, STREAM_NEWS_RAW, StreamConsum
 log = logging.getLogger("crawler")
 
 SEEN_TTL_S = 2 * 86_400
+VN_TZ = timezone(timedelta(hours=7))
 
 
 async def fetch_with_retry(http: httpx.AsyncClient, url: str, retries: int = 2) -> httpx.Response:
@@ -45,6 +48,33 @@ async def fetch_with_retry(http: httpx.AsyncClient, url: str, retries: int = 2) 
     raise AssertionError("unreachable")
 
 
+_SHORT_OFFSET = re.compile(r"(?:GMT|UTC)?\s*([+-])(\d{1,2})(?::?(\d{2}))?$")
+
+
+def parse_feed_date(raw: str | None) -> datetime | None:
+    """Parse RFC 822 / ISO dates, tolerating offsets Vietnamese feeds use, e.g. '+07' or 'GMT+7'."""
+    if not raw:
+        return None
+    text = raw.strip()
+    match = _SHORT_OFFSET.search(text)
+    if match:
+        sign, hours, minutes = match.groups()
+        text = f"{text[: match.start()].rstrip()} {sign}{int(hours):02d}{minutes or '00'}"
+    for parse in (email.utils.parsedate_to_datetime, datetime.fromisoformat):
+        try:
+            value = parse(text)
+        except (TypeError, ValueError, IndexError):
+            continue
+        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=VN_TZ).astimezone(UTC)
+    return None
+
+
+def entry_published(entry: Any) -> datetime | None:
+    if entry.get("published_parsed"):
+        return datetime.fromtimestamp(calendar.timegm(entry["published_parsed"]), tz=UTC)
+    return parse_feed_date(entry.get("published") or entry.get("updated"))
+
+
 def parse_feed(content: bytes) -> list[dict[str, Any]]:
     feed = feedparser.parse(content)
     items = []
@@ -53,9 +83,7 @@ def parse_feed(content: bytes) -> list[dict[str, Any]]:
         title = strip_html(e.get("title"))
         if not link or not title:
             continue
-        published = None
-        if e.get("published_parsed"):
-            published = datetime.fromtimestamp(calendar.timegm(e.published_parsed), tz=UTC)
+        published = entry_published(e)
         url = canonical_url(link)
         items.append({
             "url": url,

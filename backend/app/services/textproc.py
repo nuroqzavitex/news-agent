@@ -22,6 +22,14 @@ def normalize_text(text: str | None) -> str:
     return _WS_RE.sub(" ", unicodedata.normalize("NFC", text)).strip()
 
 
+def normalize_paragraphs(text: str | None) -> str:
+    """Like normalize_text but keeps paragraph breaks (one paragraph per line)."""
+    if not text:
+        return ""
+    lines = (normalize_text(line) for line in unicodedata.normalize("NFC", text).splitlines())
+    return "\n".join(line for line in lines if line)
+
+
 def strip_html(text: str | None) -> str:
     if not text:
         return ""

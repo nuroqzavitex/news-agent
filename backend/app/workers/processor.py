@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import Article
 from app.services.politeness import Politeness
-from app.services.textproc import normalize_text, simhash
+from app.services.textproc import normalize_paragraphs, normalize_text, simhash
 from app.workers.crawler import fetch_with_retry
 from app.workers.runtime import WorkerContext, run_worker
 from app.workers.streams import STREAM_NEWS_PROCESSED, STREAM_NEWS_RAW, StreamConsumer, publish
@@ -35,19 +35,25 @@ class RateLimited(Exception):
 
 
 async def fetch_content(http: httpx.AsyncClient, polite: Politeness, url: str) -> str | None:
-    """Nội dung bài; None nếu robots.txt cấm hoặc trang trả 4xx. Lỗi mạng/5xx/429 → ném để stream retry."""
+    """Article text, or None (keep the RSS summary) when robots.txt disallows it, the page returns 4xx,
+    or the host is unreachable. 5xx and 429 raise so the stream redelivers the item later."""
     if not await polite.allowed(url):
         log.info("robots.txt disallows %s, keeping RSS summary only", url)
         return None
     await polite.wait_turn(url)
-    resp = await fetch_with_retry(http, url)
+    try:
+        resp = await fetch_with_retry(http, url)
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        # Host refuses/drops our connections (possibly blocking us): do not hammer it with retries.
+        log.warning("cannot connect to %s (%s), keeping RSS summary only", url, type(exc).__name__)
+        return None
     if resp.status_code == 429:
         raise RateLimited(url)
     if 400 <= resp.status_code < 500:
         return None
     resp.raise_for_status()
     extracted = trafilatura.extract(resp.text, include_comments=False, include_tables=False, favor_precision=True)
-    return normalize_text(extracted) if extracted else None
+    return normalize_paragraphs(extracted) if extracted else None
 
 
 async def find_near_duplicate(s: AsyncSession, h: int, url: str) -> int | None:
