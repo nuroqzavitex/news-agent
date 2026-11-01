@@ -1,0 +1,8 @@
+# Nguồn RSS MVP (spec §8). Đã kiểm tra trả 200 ngày 01/11/2026.
+sources:
+  - {code: vnexpress,  name: VnExpress,  rss_url: "https://vnexpress.net/rss/tin-moi-nhat.rss", category: tong-hop}
+  - {code: tuoitre,    name: Tuổi Trẻ,   rss_url: "https://tuoitre.vn/rss/tin-moi-nhat.rss",    category: tong-hop}
+  - {code: thanhnien,  name: Thanh Niên, rss_url: "https://thanhnien.vn/rss/home.rss",          category: tong-hop}
+  - {code: dantri,     name: Dân trí,    rss_url: "https://dantri.com.vn/rss/home.rss",         category: tong-hop}
+  - {code: vietnamnet, name: VietnamNet, rss_url: "https://vietnamnet.vn/tin-tuc-24h.rss",      category: tong-hop}
+  - {code: cafef,      name: CafeF,      rss_url: "https://cafef.vn/home.rss",                  category: kinh-te}

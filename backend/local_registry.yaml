@@ -1,0 +1,8 @@
+# Danh sách agent tĩnh dùng khi REGISTRY_MODE=local.
+# Thêm agent của nhóm khác (hoặc mock agent) vào đây để test coordination khi Registry Team 1 chưa sẵn sàng.
+agents: []
+#  - agent_id: mock-finance
+#    group_id: mock
+#    domain: finance
+#    capabilities: [stock_price]
+#    endpoint: http://mock-finance:9001
