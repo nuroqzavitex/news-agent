@@ -13,7 +13,10 @@ export const metadata: Metadata = { title: "Tin tức" };
 
 const PAGE_SIZE = 20;
 
-type Params = { q?: string; source?: string; page?: string };
+type Params = { q?: string; source?: string; sentiment?: string; mode?: string; page?: string };
+
+const MODES = ["hybrid", "keyword", "semantic"];
+const SENTIMENTS = ["positive", "neutral", "negative"];
 
 export default function NewsPage({ searchParams }: PageProps<"/news">) {
   return (
@@ -37,20 +40,29 @@ async function SearchSection({ searchParams }: { searchParams: Promise<Params> }
   const params = await searchParams;
   const q = first(params.q);
   const source = first(params.source);
+  const sentiment = SENTIMENTS.includes(first(params.sentiment)) ? first(params.sentiment) : "";
+  const mode = MODES.includes(first(params.mode)) ? first(params.mode) : "hybrid";
   const page = Math.max(1, Number.parseInt(first(params.page) || "1", 10) || 1);
 
   let result: SearchResult;
   let sources: SourceOut[];
   try {
     [result, sources] = await Promise.all([
-      api.articles({ q: q || undefined, source: source || undefined, page, page_size: PAGE_SIZE }),
+      api.articles({
+        q: q || undefined,
+        source: source || undefined,
+        sentiment: sentiment || undefined,
+        mode,
+        page,
+        page_size: PAGE_SIZE,
+      }),
       api.sources(),
     ]);
   } catch (error) {
     if (!(error instanceof ApiUnreachable)) throw error;
     return (
       <section className="flex flex-col gap-5">
-        <SearchForm q={q} source={source} />
+        <SearchForm q={q} source={source} sentiment={sentiment} mode={mode} />
         <ApiUnreachableNotice />
       </section>
     );
@@ -59,13 +71,19 @@ async function SearchSection({ searchParams }: { searchParams: Promise<Params> }
   const sourceNames = Object.fromEntries(sources.map((s) => [s.code, s.name]));
   const pages = Math.max(1, Math.ceil(result.count / PAGE_SIZE));
   const pageHref = (p: number) => {
-    const search = new URLSearchParams({ ...(q && { q }), ...(source && { source }), page: String(p) });
+    const search = new URLSearchParams({
+      ...(q && { q }),
+      ...(source && { source }),
+      ...(sentiment && { sentiment }),
+      ...(mode !== "hybrid" && { mode }),
+      page: String(p),
+    });
     return `/news?${search}`;
   };
 
   return (
     <section aria-labelledby="results-title" className="flex flex-col gap-5">
-      <SearchForm q={q} source={source} sources={sources} />
+      <SearchForm q={q} source={source} sentiment={sentiment} mode={mode} sources={sources} />
 
       <h2 id="results-title" className="text-sm text-muted">
         {q
@@ -73,6 +91,12 @@ async function SearchSection({ searchParams }: { searchParams: Promise<Params> }
           : `${result.count.toLocaleString("vi-VN")} bài, mới nhất trước`}
         {source && ` trên ${sourceNames[source] ?? source}`}
       </h2>
+
+      {q && mode !== "keyword" && result.mode_used === "keyword" && (
+        <p className="text-sm text-muted">
+          Tìm theo ý nghĩa chưa sẵn sàng vì agent chưa có embedding, nên kết quả dưới đây chỉ khớp theo từ khóa.
+        </p>
+      )}
 
       {result.results.length > 0 ? (
         <ArticleList items={result.results} sourceNames={sourceNames} now={new Date()} />

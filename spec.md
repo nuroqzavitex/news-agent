@@ -1,10 +1,13 @@
 # News Agent — Đặc tả dự án (MVP)
 
 > MI4304 Hệ thống phân tán — Bài tập lớn "Multi-Agent Distributed System"
-> Phiên bản: 0.2 · Cập nhật: 01/11/2026
+> Phiên bản: 0.3 · Cập nhật: 07/11/2026
 >
 > **Thay đổi 0.2**: hàng đợi nội bộ dùng **Redis Streams** thay Redpanda; LLM/embedding chốt **Gemini** (vector 768 chiều);
 > dashboard MVP rút còn **6 trang**; dự án làm từ đầu (không có bộ khung sẵn).
+>
+> **Thay đổi 0.3**: `gemini-2.0-flash` và `text-embedding-004` đã bị Google tắt, thay bằng `gemini-3.5-flash-lite` và `gemini-embedding-2`;
+> embedding và sentiment tách khỏi processor sang worker `enricher`; trending tính theo yêu cầu thay vì lưu bảng `topics`.
 
 ---
 
@@ -118,6 +121,7 @@ trong mạng Agent của cả lớp. Agent:
 | `crawler` | Đọc RSS, tải HTML, `XADD news.raw` | Không | Ngang (mỗi job crawl lấy lock theo `source_id`) |
 | `processor` | `XREADGROUP news.raw` → làm sạch → khử trùng lặp → embedding → sentiment → lưu DB → `XACK` | Không | Ngang theo consumer group |
 | `scheduler` | Định kỳ tạo crawl job, dọn memory hết TTL | Không (dùng Redis lock để chỉ 1 instance chạy) | 1 active |
+| `enricher` | Lấy bài chưa xử lý từ DB (`FOR UPDATE SKIP LOCKED`) → embedding + sentiment theo lô | Không | Ngang |
 | `frontend` | Dashboard Next.js | Không | — |
 | `postgres` | Dữ liệu chính + vector | Có | 1 (stretch: read replica) |
 | `redis` | Dedup message, cache, distributed lock, rate limit, **Streams** crawl → process | Có (bật AOF để giữ stream) | 1 |
@@ -138,8 +142,8 @@ trong mạng Agent của cả lớp. Agent:
 | Cache / dedup / lock | Redis 7 (`redis-py` asyncio) | `SET NX EX` cho idempotency, lock scheduler |
 | Message queue nội bộ | Redis Streams + consumer group | Có ack, pending list, at-least-once; không thêm container; tách bạch với Broker Team 2 |
 | Crawl | `feedparser` + `trafilatura` | Đọc RSS + trích nội dung bài |
-| LLM | Gemini (`gemini-2.0-flash`) qua `google-genai`, bọc sau interface `LLMService` | Free tier rộng; đổi provider chỉ sửa 1 file |
-| Embedding | Gemini `text-embedding-004`, **cố định 768 chiều** | Đa ngôn ngữ, không cần GPU; đổi model = migration mới |
+| LLM | Gemini `gemini-3.5-flash-lite` qua REST (`httpx`), gói trong `services/llm.py` | Bản stable cho tải lớn, độ trễ thấp; không thêm SDK; đổi provider chỉ sửa 1 file |
+| Embedding | Gemini `gemini-embedding-2`, `output_dimensionality` **768** | Trên 100 ngôn ngữ, không cần GPU; đổi model thì phải embedding lại toàn bộ |
 | Frontend | Next.js 15 (App Router) + TypeScript | SSR, routing sẵn |
 | UI | Tailwind CSS + shadcn/ui | Nhanh, đẹp |
 | Data fetching | TanStack Query | Cache, polling cho dashboard realtime |
@@ -179,7 +183,7 @@ Response nằm trong `payload` của envelope `type=response`; lỗi thì `type=
 { "query": "bão số 7", "limit": 8, "max_words": 150 }
 → { "summary": "...", "key_points": ["..."],
     "sources": [ { "id": "a_1", "url": "...", "source": "tuoitre" } ],
-    "generated_by": "gemini-2.0-flash", "confidence": 0.7 }
+    "generated_by": "gemini-3.5-flash-lite", "confidence": 0.7 }
 ```
 
 ### 5.3 `sentiment`
@@ -280,15 +284,13 @@ sources            (id, code, name, rss_url, category, enabled, last_crawled_at,
 articles           (id, source_id→sources, url UNIQUE, url_hash, title, summary, content,
                     author, category, published_at, crawled_at,
                     simhash BIGINT,                         -- khử bài trùng giữa các báo
-                    sentiment_label, sentiment_score,
+                    sentiment_label, sentiment_score, sentiment_source,   -- lexicon|llm
+                    enriched_at, enrich_attempts,           -- hàng đợi của enricher
                     tsv tsvector,                           -- full-text (GIN index)
                     lang, status)                           -- raw|processed|failed
 
 article_chunks     (id, article_id→articles, chunk_index, text,
                     embedding vector(768))                  -- HNSW index (cosine)
-
-topics             (id, name, window_start, window_end, count, delta_pct)   -- tổng hợp định kỳ
-article_topics     (article_id, topic_id)
 
 knowledge_items    (id, key, content JSONB,                 -- M4: kiến thức học từ agent khác
                     source_agent, source_message_id,
@@ -324,7 +326,7 @@ agent_cache        (agent_id PK, card JSONB, last_seen_at, source)   -- fallback
 |---|---|---|
 | `crawl.jobs` | `source_code` | scheduler / API → crawler (group `crawler`) |
 | `news.raw` | `source_code`, `url`, `title`, `summary`, `published_at` | crawler → processor (group `processor`) |
-| `news.processed` | `article_id` | processor → (stretch) pub/sub, trending |
+| `news.processed` | `article_id` | processor → (stretch) pub/sub |
 | `news.dlq` | `url`, `error`, `attempts` | processor (lỗi quá 3 lần) → xem trên dashboard |
 
 Mỗi stream giới hạn `MAXLEN ~ 10000`.
@@ -350,12 +352,15 @@ Mỗi stream giới hạn `MAXLEN ~ 10000`.
      tải HTML (timeout 10 giây, retry 2 lần). 429 → để stream giao lại sau; 4xx khác hoặc robots cấm → chỉ lưu tóm tắt RSS (`status=partial`).
    - `trafilatura` trích nội dung, chuẩn hóa unicode.
    - Tính `simhash`; nếu gần trùng bài đã có (Hamming ≤ 3) thì liên kết làm bài trùng, không xử lý lại.
-   - Chia chunk khoảng 500 token → embedding theo batch.
-   - Sentiment bằng LLM theo batch (fallback: từ điển từ khóa khi LLM lỗi).
    - Ghi DB trong **một transaction**, rồi `XACK` (at-least-once + upsert theo `url` ⇒ idempotent).
    - Message pending quá 60 giây (consumer chết) được consumer khác nhận lại bằng `XAUTOCLAIM`.
    - Lỗi 3 lần (đếm theo delivery count) → `XADD news.dlq` rồi `XACK`.
-4. **Trending** (scheduler, mỗi 30 phút): đếm cụm từ khóa và entity trong cửa sổ 24 giờ so với 24 giờ trước → bảng `topics`.
+4. **Enricher** lấy lô 20 bài có `enriched_at IS NULL` (`FOR UPDATE SKIP LOCKED`, nghỉ giữa các lô để không vượt rate limit):
+   - Chia chunk khoảng 500 token → embedding theo batch; sentiment bằng LLM theo batch.
+   - Chưa có key hoặc LLM lỗi: sentiment từ điển từ khóa; bài vẫn chờ, nên khi có key thì bài cũ tự được xử lý.
+   - Lỗi tạm thời (mạng, quota, sai key): backoff, không tính vào số lần thử. Gemini từ chối đầu vào (400): tối đa 3 lần rồi bỏ qua.
+   - Processor đổi nội dung bài thì đặt lại `enriched_at`.
+5. **Trending** tính theo yêu cầu từ tiêu đề + tóm tắt, cache Redis 5 phút: cụm 2–5 âm tiết, xếp theo mức vượt tần suất của 7 cửa sổ trước đó; `delta_pct` so với cửa sổ liền trước. Không cần LLM.
 
 **Nguồn MVP** (RSS công khai): VnExpress, Tuổi Trẻ, Thanh Niên, Dân trí, VietnamNet, CafeF.
 Chỉ lưu tiêu đề, tóm tắt, nội dung phục vụ tìm kiếm nội bộ, luôn kèm link gốc; tôn trọng `robots.txt` và giới hạn tần suất.
@@ -498,6 +503,7 @@ news-agent/
 │   │       ├── crawler.py
 │   │       ├── processor.py
 │   │       ├── scheduler.py
+│   │       ├── enricher.py
 │   │       └── streams.py           # Redis Streams producer/consumer helper
 │   ├── scripts/
 │   │   ├── seed_sources.py
@@ -552,8 +558,8 @@ DATABASE_URL=postgresql+asyncpg://news:news@postgres:5432/news
 REDIS_URL=redis://redis:6379/0
 # AI
 GEMINI_API_KEY=
-LLM_MODEL=gemini-2.0-flash
-EMBEDDING_MODEL=text-embedding-004   # 768 chiều, khớp vector(768)
+LLM_MODEL=gemini-3.5-flash-lite
+EMBEDDING_MODEL=gemini-embedding-2   # đổi model thì phải embedding lại toàn bộ
 # Dashboard
 ADMIN_PASSWORD=change-me
 NEXT_PUBLIC_API_BASE=http://localhost:8008
@@ -564,7 +570,7 @@ FAULTS_ENABLED=true
 ### 14.2 Docker Compose services
 
 `postgres` (image `pgvector/pgvector:pg16`), `redis` (bật AOF), `agent-api`, `crawler`, `processor`,
-`scheduler`, `frontend`, `caddy` (chỉ khi deploy). Profile `mock` chạy thêm 2 mock agent (Finance, Weather) để tự test coordination.
+`scheduler`, `enricher`, `frontend`, `caddy` (chỉ khi deploy). Profile `mock` chạy thêm 2 mock agent (Finance, Weather) để tự test coordination.
 
 ### 14.3 Deploy để nhóm khác gọi được
 

@@ -514,6 +514,8 @@ export interface operations {
                 source?: string[] | null;
                 from?: string | null;
                 to?: string | null;
+                sentiment?: ("positive" | "neutral" | "negative") | null;
+                mode?: "keyword" | "semantic" | "hybrid";
                 page?: number;
                 page_size?: number;
             };

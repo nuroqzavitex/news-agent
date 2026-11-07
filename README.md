@@ -14,12 +14,26 @@ docker compose up -d --build
 ```
 
 This starts `postgres` (pgvector), `redis`, `migrate` (runs alembic and seeds 6 RSS sources), `agent-api` (port 8008),
-`crawler`, `processor`, `scheduler` and `frontend` (port 3000). After about a minute the DB holds a few hundred articles.
+`crawler`, `processor`, `scheduler`, `enricher` and `frontend` (port 3000). After about a minute the DB holds a few hundred articles.
 
 - Dashboard: http://localhost:3000/news
 - Swagger: http://localhost:8008/docs
 - Agent Card: http://localhost:8008/card
 - Health: http://localhost:8008/health
+
+### Gemini API key (optional)
+
+Everything runs without a key, on non-LLM fallbacks:
+
+| Feature | With `GEMINI_API_KEY` | Without |
+|---|---|---|
+| Search (`mode_used` in the response) | Hybrid: keyword + semantic | Keyword only |
+| `news_summary` (`generated_by`) | LLM summary | First sentences of the top articles, confidence 0.3 |
+| `sentiment` | LLM | Keyword lexicon (rough) |
+| `trending_topics` | Same | Same (never uses the LLM) |
+
+To enable it, set `GEMINI_API_KEY` in `.env` and run `docker compose up -d`. The `enricher` then processes existing
+articles too, 20 per batch with a 10-second pause (`ENRICH_INTERVAL_S`). `/health` reports `deps.llm`.
 
 ## Send a test message (acting as another agent)
 
@@ -30,6 +44,9 @@ uv run python -m scripts.send news_search '{"query": "giá vàng", "limit": 3}'
 uv run python -m scripts.send news_search '{"query": "gia vang"}' --dup        # dedup: both attempts return the same reply
 uv run python -m scripts.send news_search '{"query": "x"}' --bad-token          # 401
 uv run python -m scripts.send news_search '{"query": "x"}' --spoof              # 401: token belongs to another agent
+uv run python -m scripts.send news_summary '{"query": "giá vàng", "max_words": 80}'
+uv run python -m scripts.send sentiment '{"query": "giá vàng", "window": "7d"}'
+uv run python -m scripts.send trending_topics '{"window": "24h", "limit": 10}'
 ```
 
 In local mode, tokens are HMAC-signed with `LOCAL_SHARED_SECRET` (see `app/adapters/local/identity.py`).
@@ -76,10 +93,10 @@ backend/app/
   contracts.py  ports.py  factory.py     # shared contract + 4 infrastructure ports + adapter selection
   adapters/local/                        # registry (YAML) · broker (direct HTTP) · identity (HMAC) · tracer (log)
   agent/handler.py  dedup.py             # auth → dedup (Redis) → dispatch (timeout) → persist + trace
-  agent/capabilities/                    # @capability: news_search
+  agent/capabilities/                    # @capability: news_search, news_summary, sentiment, trending_topics
   api/                                   # /card /health /messages + /api/v1/*
-  services/                              # search (FTS), textproc (simhash), politeness, health, tracing
-  workers/                               # scheduler → crawl.jobs → crawler → news.raw → processor → Postgres
+  services/                              # llm (Gemini), search (FTS + pgvector), sentiment, trending, textproc, politeness, ...
+  workers/                               # scheduler → crawl.jobs → crawler → news.raw → processor → Postgres ← enricher
   db/                                    # models + repositories;  migrations/ (alembic)
 frontend/src/
   app/news/                              # /news (crawl grid, search, results) and /news/[id]
@@ -96,7 +113,7 @@ remote adapters.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Finish M1 | CI, integration tests, Next.js shell, `/news` | ✅ Done |
-| 2. AI & knowledge | Gemini embeddings, hybrid search, `news_summary`, `sentiment`, `trending_topics` with non-LLM fallbacks | ⏳ |
+| 2. AI & knowledge | Gemini embeddings, hybrid search, `news_summary`, `sentiment`, `trending_topics` with non-LLM fallbacks | ✅ Done (Gemini calls not yet tried with a real key) |
 | 3. Coordination | Mock agents (finance ×2, weather), `AgentClient` (retry, failover), coordinator, planner, `/ask`, knowledge memory | ⏳ |
 | 4. Reliability & observability | Fault injection, spec §9 fault tests, metrics, admin login, `/`, `/messages` + traces, `/network`, `/faults` | ⏳ |
 | 5. Demo ready | Scripted run of the 7 demo scenarios (spec §12), `docs/contract.md` | ⏳ |

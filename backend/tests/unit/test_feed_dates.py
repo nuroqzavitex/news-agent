@@ -14,6 +14,7 @@ EXPECTED = datetime(2026, 11, 1, 2, 41, tzinfo=UTC)
     "Sun, 01 Nov 2026 02:41:00 GMT",
     "2026-11-01T09:41:00+07:00",
     "2026-11-01T09:41:00",                 # no offset: Vietnam time
+    "11/1/2026 9:41:00 AM",           # Tuoi Tre: US order, narrow no-break space, Vietnam time
 ])
 def test_parse_feed_date_variants(raw):
     assert parse_feed_date(raw) == EXPECTED

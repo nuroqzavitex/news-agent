@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import type { SearchHit } from "@/lib/api";
-import { formatPublished } from "@/lib/format";
+import { formatPublished, SENTIMENT_LABEL } from "@/lib/format";
 
 export function ArticleList({
   items,
@@ -27,6 +27,11 @@ export function ArticleList({
               </Link>
             </h3>
             {hit.snippet && <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted">{hit.snippet}</p>}
+            {hit.sentiment && SENTIMENT_LABEL[hit.sentiment] && (
+              <p className={`mt-1 text-xs font-medium ${hit.sentiment === "positive" ? "text-ok" : "text-warn"}`}>
+                {SENTIMENT_LABEL[hit.sentiment]}
+              </p>
+            )}
           </div>
         </li>
       ))}

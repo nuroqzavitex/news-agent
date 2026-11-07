@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import func, select, text
 
 from app.db.models import Source
+from app.services.llm import LAST_ERROR_KEY
 from app.state import AppState
 
 PING_TIMEOUT_S = 2.0
@@ -20,6 +21,18 @@ async def _check(coro: Any) -> bool:
         return bool(await asyncio.wait_for(coro, PING_TIMEOUT_S))
     except Exception:  # noqa: BLE001
         return False
+
+
+async def _llm_status(state: AppState) -> str:
+    if not state.settings.gemini_api_key:
+        return "not_configured"
+    try:
+        error = await asyncio.wait_for(state.redis.get(LAST_ERROR_KEY), PING_TIMEOUT_S)
+    except Exception:  # noqa: BLE001 — Redis trouble is reported separately
+        return "unknown"
+    if error is None:
+        return "ok"
+    return f"error ({error.decode() if isinstance(error, bytes) else error})"
 
 
 async def compute_health(state: AppState) -> dict[str, Any]:
@@ -45,7 +58,7 @@ async def compute_health(state: AppState) -> dict[str, Any]:
         age = (datetime.now(UTC) - last_crawl).total_seconds()
         deps["crawler"] = "ok" if age <= state.settings.crawler_stale_after_s else f"stale ({int(age)}s)"
 
-    deps["llm"] = "configured" if state.settings.gemini_api_key else "not_configured"
+    deps["llm"] = await _llm_status(state)
 
     infra = state.infra
     for name, port in (("registry", infra.registry), ("broker", infra.broker),
@@ -54,7 +67,9 @@ async def compute_health(state: AppState) -> dict[str, Any]:
 
     if not db_ok:
         status = "offline"
-    elif any(deps[k] not in ("ok",) for k in ("redis", "crawler", "registry", "broker", "identity", "tracer")):
+    elif deps["llm"].startswith("error") or any(
+        deps[k] != "ok" for k in ("redis", "crawler", "registry", "broker", "identity", "tracer")
+    ):
         status = "degraded"
     else:
         status = "online"

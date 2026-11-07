@@ -68,6 +68,9 @@ class Article(Base):
     duplicate_of: Mapped[int | None] = mapped_column(ForeignKey("articles.id"))
     sentiment_label: Mapped[str | None] = mapped_column(Text)
     sentiment_score: Mapped[float | None] = mapped_column(Float)
+    sentiment_source: Mapped[str | None] = mapped_column(Text)  # lexicon | llm
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enrich_attempts: Mapped[int] = mapped_column(Integer, server_default="0")
     tsv: Mapped[Any] = mapped_column(TSVECTOR, Computed(TSV_EXPR, persisted=True))
     lang: Mapped[str] = mapped_column(Text, server_default="vi")
     status: Mapped[str] = mapped_column(Text, server_default="processed")

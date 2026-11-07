@@ -5,7 +5,7 @@ import { Suspense } from "react";
 
 import { ApiUnreachableNotice } from "@/components/api-error";
 import { api, ApiUnreachable, type ArticleDetail } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, SENTIMENT_LABEL } from "@/lib/format";
 
 export default function ArticlePage({ params }: PageProps<"/news/[id]">) {
   return (
@@ -42,6 +42,12 @@ async function Article({ params }: { params: Promise<{ id: string }> }) {
       <p className="text-sm text-muted">
         <span className="font-medium text-ink">{sourceName}</span>
         {article.published_at && `, đăng lúc ${formatDateTime(article.published_at)}`}
+        {article.sentiment_label && SENTIMENT_LABEL[article.sentiment_label] && (
+          <span className={`font-medium ${article.sentiment_label === "positive" ? "text-ok" : "text-warn"}`}>
+            {" "}
+            ({SENTIMENT_LABEL[article.sentiment_label].toLowerCase()})
+          </span>
+        )}
       </p>
       <h1 className="mt-2 text-3xl leading-tight font-bold tracking-tight text-balance">{article.title}</h1>
       {article.summary && <p className="mt-4 text-lg leading-relaxed font-medium">{article.summary}</p>}

@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 import trafilatura
-from sqlalchemy import text
+from sqlalchemy import case, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -100,7 +100,13 @@ async def process_item(
         stmt = insert(Article).values(**values)
         stmt = stmt.on_conflict_do_update(
             index_elements=[Article.url],
-            set_={k: stmt.excluded[k] for k in ("title", "summary", "content", "simhash", "status")},
+            set_={
+                **{k: stmt.excluded[k] for k in ("title", "summary", "content", "simhash", "status")},
+                # New text means old embeddings are stale: send the article back to the enricher.
+                "enriched_at": case(
+                    (Article.content.is_distinct_from(stmt.excluded.content), None), else_=Article.enriched_at
+                ),
+            },
         ).returning(Article.id)
         article_id = int((await s.execute(stmt)).scalar_one())
         await s.commit()

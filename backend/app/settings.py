@@ -32,10 +32,16 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://news:news@localhost:5432/news"
     redis_url: str = "redis://localhost:6379/0"
 
-    # AI (dùng từ M4)
+    # AI. Everything works without a key, through non-LLM fallbacks.
     gemini_api_key: str = ""
-    llm_model: str = "gemini-2.0-flash"
-    embedding_model: str = "text-embedding-004"
+    llm_model: str = "gemini-3.5-flash-lite"
+    # Changing the embedding model requires re-embedding every article.
+    embedding_model: str = "gemini-embedding-2"
+    # Both must fit inside capability_timeout_s, so that a slow model ends in a fallback rather than a timeout.
+    llm_timeout_s: float = 4.5
+    query_embed_timeout_s: float = 1.5
+    # Pause between enricher batches, to stay within API rate limits.
+    enrich_interval_s: float = 10.0
 
     # Agent protocol
     capability_timeout_s: float = 8.0

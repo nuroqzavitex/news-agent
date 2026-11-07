@@ -55,6 +55,6 @@ capability = registry.register
 
 def load_builtin_capabilities() -> CapabilityRegistry:
     """Import các module capability để decorator chạy."""
-    from app.agent.capabilities import news_search  # noqa: F401
+    from app.agent.capabilities import news_search, news_summary, sentiment, trending  # noqa: F401
 
     return registry

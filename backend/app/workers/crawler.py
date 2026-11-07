@@ -52,15 +52,20 @@ _SHORT_OFFSET = re.compile(r"(?:GMT|UTC)?\s*([+-])(\d{1,2})(?::?(\d{2}))?$")
 
 
 def parse_feed_date(raw: str | None) -> datetime | None:
-    """Parse RFC 822 / ISO dates, tolerating offsets Vietnamese feeds use, e.g. '+07' or 'GMT+7'."""
+    """Parse the date formats Vietnamese feeds use: RFC 822 and ISO, offsets like '+07' or 'GMT+7',
+    and US-style '11/7/2026 8:26:00 AM' (Tuoi Tre). Dates without an offset are Vietnam time."""
     if not raw:
         return None
-    text = raw.strip()
+    text = " ".join(raw.split())  # also normalizes the narrow no-break space in Tuoi Tre's dates
     match = _SHORT_OFFSET.search(text)
     if match:
         sign, hours, minutes = match.groups()
         text = f"{text[: match.start()].rstrip()} {sign}{int(hours):02d}{minutes or '00'}"
-    for parse in (email.utils.parsedate_to_datetime, datetime.fromisoformat):
+
+    def us_style(value: str) -> datetime:
+        return datetime.strptime(value, "%m/%d/%Y %I:%M:%S %p")
+
+    for parse in (email.utils.parsedate_to_datetime, datetime.fromisoformat, us_style):
         try:
             value = parse(text)
         except (TypeError, ValueError, IndexError):

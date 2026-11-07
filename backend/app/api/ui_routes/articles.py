@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import get_state
 from app.db.models import Article, Source
-from app.services.search import SearchResult, article_public_id, parse_article_id
+from app.services.search import SearchMode, SearchResult, SentimentLabel, article_public_id, parse_article_id
 from app.state import AppState
 from app.workers.scheduler import enqueue_crawl
 
@@ -23,6 +23,8 @@ async def list_articles(
     source: list[str] | None = Query(default=None),
     from_: date | None = Query(default=None, alias="from"),
     to: date | None = None,
+    sentiment: SentimentLabel | None = None,
+    mode: SearchMode = "hybrid",
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     state: AppState = Depends(get_state),
@@ -30,9 +32,9 @@ async def list_articles(
     offset = (page - 1) * page_size
     if q:
         return await state.search.search(query=q, limit=page_size, offset=offset,
-                                         from_date=from_, to_date=to, sources=source)
+                                         from_date=from_, to_date=to, sources=source, sentiment=sentiment, mode=mode)
     return await state.search.latest(limit=page_size, offset=offset, sources=source,
-                                     from_date=from_, to_date=to)
+                                     from_date=from_, to_date=to, sentiment=sentiment)
 
 
 class ArticleDetail(BaseModel):

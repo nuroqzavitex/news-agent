@@ -1,5 +1,10 @@
 const TZ = "Asia/Ho_Chi_Minh";
 
+export const SENTIMENT_LABEL: Record<string, string> = {
+  positive: "Tích cực",
+  negative: "Tiêu cực",
+};
+
 const timeFmt = new Intl.DateTimeFormat("vi-VN", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 const dateTimeFmt = new Intl.DateTimeFormat("vi-VN", {
   timeZone: TZ,

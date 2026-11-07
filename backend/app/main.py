@@ -22,6 +22,7 @@ from app.db.session import make_engine, make_session_factory
 from app.factory import build_infra
 from app.logging_setup import setup_logging
 from app.services.health import compute_health
+from app.services.llm import GeminiClient
 from app.services.search import SearchService
 from app.services.tracing import TraceRecorder
 from app.settings import Settings, get_settings
@@ -37,7 +38,14 @@ def build_state(settings: Settings) -> AppState:
     http = httpx.AsyncClient(headers={"User-Agent": settings.http_user_agent})
     infra = build_infra(settings, http)
     capabilities = load_builtin_capabilities()
-    search = SearchService(sessions)
+    llm = GeminiClient(
+        api_key=settings.gemini_api_key,
+        http=http,
+        llm_model=settings.llm_model,
+        embedding_model=settings.embedding_model,
+        redis=redis,
+    )
+    search = SearchService(sessions, llm, redis, query_embed_timeout_s=settings.query_embed_timeout_s)
     tracer = TraceRecorder(settings.agent_id, infra.tracer, SqlTraceSink(sessions))
     handler = MessageHandler(
         agent_id=settings.agent_id,
@@ -48,7 +56,9 @@ def build_state(settings: Settings) -> AppState:
         message_log=SqlMessageLog(sessions),
         tracer=tracer,
         capability_timeout_s=settings.capability_timeout_s,
-        deps={"search": search, "sessions": sessions, "redis": redis},
+        deps={
+            "search": search, "sessions": sessions, "redis": redis, "llm": llm, "tracer": tracer, "settings": settings,
+        },
     )
     return AppState(settings=settings, engine=engine, sessions=sessions, redis=redis, http=http,
                     infra=infra, capabilities=capabilities, search=search, tracer=tracer, handler=handler)

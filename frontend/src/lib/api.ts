@@ -59,7 +59,14 @@ export const api = {
     const res = await request("/health");
     return res.json() as Promise<Health>;
   },
-  articles: (query: { q?: string; source?: string; page?: number; page_size?: number }) =>
+  articles: (query: {
+    q?: string;
+    source?: string;
+    sentiment?: string;
+    mode?: string;
+    page?: number;
+    page_size?: number;
+  }) =>
     getJson<SearchResult>("/api/v1/articles", query),
   article: async (id: string): Promise<ArticleDetail | null> => {
     const res = await request(`/api/v1/articles/${encodeURIComponent(id)}`);
