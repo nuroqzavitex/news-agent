@@ -45,6 +45,10 @@ class Settings(BaseSettings):
 
     # Agent protocol
     capability_timeout_s: float = 8.0
+    # Calling other agents: per attempt, retries per agent, and the total for one capability across all agents.
+    agent_call_timeout_s: float = 2.5
+    agent_call_retries: int = 1
+    agent_call_deadline_s: float = 12.0
     dedup_ttl_s: int = 600
     heartbeat_interval_s: float = 15.0
 

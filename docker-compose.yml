@@ -8,11 +8,21 @@ x-backend: &backend
   environment:
     DATABASE_URL: postgresql+asyncpg://news:news@postgres:5432/news
     REDIS_URL: redis://redis:6379/0
+    LOCAL_REGISTRY_FILE: ${LOCAL_REGISTRY_FILE:-local_registry.yaml}
   restart: unless-stopped
   depends_on:
     postgres: {condition: service_healthy}
     redis: {condition: service_healthy}
     migrate: {condition: service_completed_successfully}
+
+x-mock: &mock
+  build: ./backend
+  profiles: [mock]
+  env_file:
+    - path: .env
+      required: false
+  command: ["uvicorn", "scripts.mock_agent:app", "--host", "0.0.0.0", "--port", "9001"]
+  restart: unless-stopped
 
 services:
   postgres:
@@ -68,6 +78,23 @@ services:
   enricher:
     <<: *backend
     command: ["python", "-m", "app.workers.enricher"]
+
+  # Stand-ins for other teams' agents. Made-up data, marked "mock": true. Ports are for injecting faults by hand.
+  mock-finance-a:
+    <<: *mock
+    environment: {MOCK_AGENT_ID: mock-finance-a, MOCK_CAPABILITIES: stock_price, MOCK_CONFIDENCE: "0.9"}
+    ports: ["9001:9001"]
+
+  mock-finance-b:
+    <<: *mock
+    environment:
+      {MOCK_AGENT_ID: mock-finance-b, MOCK_CAPABILITIES: stock_price, MOCK_PRICE_BIAS: "0.02", MOCK_CONFIDENCE: "0.7"}
+    ports: ["9002:9001"]
+
+  mock-weather:
+    <<: *mock
+    environment: {MOCK_AGENT_ID: mock-weather, MOCK_CAPABILITIES: weather}
+    ports: ["9003:9001"]
 
   frontend:
     build: ./frontend

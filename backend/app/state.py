@@ -10,9 +10,12 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.agent.capabilities import CapabilityRegistry
+from app.agent.client import AgentClient
+from app.agent.coordinator import Coordinator
 from app.agent.handler import MessageHandler
 from app.contracts import AgentCard
 from app.factory import Infra
+from app.services.memory import KnowledgeStore
 from app.services.search import SearchService
 from app.services.tracing import TraceRecorder
 from app.settings import Settings
@@ -30,6 +33,9 @@ class AppState:
     search: SearchService
     tracer: TraceRecorder
     handler: MessageHandler
+    client: AgentClient
+    memory: KnowledgeStore
+    coordinator: Coordinator
     started_at: float = field(default_factory=time.time)
 
     def card(self, status: str = "online") -> AgentCard:

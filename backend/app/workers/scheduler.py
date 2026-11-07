@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import Source
+from app.services.memory import KnowledgeStore
 from app.workers.runtime import WorkerContext, run_worker
 from app.workers.streams import STREAM_CRAWL_JOBS, publish
 
@@ -21,6 +22,7 @@ log = logging.getLogger("scheduler")
 LOCK_KEY = "lock:scheduler"
 LOCK_TTL_S = 30
 TICK_S = 10
+MEMORY_PURGE_INTERVAL_S = 3600
 
 # Gia hạn lock chỉ khi mình đang giữ nó (atomic).
 _RENEW = """
@@ -66,6 +68,10 @@ async def main(ctx: WorkerContext) -> None:
                 due = await schedule_due_sources(ctx.redis, ctx.sessions, ctx.settings.crawl_interval_s)
                 if due:
                     log.info("enqueued crawl jobs: %s", ", ".join(due))
+                if await ctx.redis.set("sched:memory_purge", 1, nx=True, ex=MEMORY_PURGE_INTERVAL_S):
+                    purged = await KnowledgeStore(ctx.sessions).purge_expired()
+                    if purged:
+                        log.info("purged %d expired knowledge items", purged)
         except Exception:  # noqa: BLE001
             log.exception("scheduler tick failed")
         try:

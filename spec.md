@@ -7,7 +7,8 @@
 > dashboard MVP rút còn **6 trang**; dự án làm từ đầu (không có bộ khung sẵn).
 >
 > **Thay đổi 0.3**: `gemini-2.0-flash` và `text-embedding-004` đã bị Google tắt, thay bằng `gemini-3.5-flash-lite` và `gemini-embedding-2`;
-> embedding và sentiment tách khỏi processor sang worker `enricher`; trending tính theo yêu cầu thay vì lưu bảng `topics`.
+> embedding và sentiment tách khỏi processor sang worker `enricher`; trending tính theo yêu cầu thay vì lưu bảng `topics`;
+> gọi agent khác: mỗi agent thử tối đa 2 lần (tổng 12 giây cho một capability), `stock_price` hỏi song song 2 agent để phát hiện xung đột.
 
 ---
 
@@ -372,7 +373,7 @@ Chỉ lưu tiêu đề, tóm tắt, nội dung phục vụ tìm kiếm nội b�
 | Tình huống | Phát hiện | Xử lý | Cách demo |
 |---|---|---|---|
 | Message trùng (retry) | `dedup:{message_id}` tồn tại | Trả reply đã lưu, không xử lý lại | `send.py --dup`, đếm số lần handler chạy |
-| Agent đích không trả lời | Timeout httpx | Retry backoff (0.5 → 1 → 2 giây), giữ `message_id` | Fault: delay 10 giây |
+| Agent đích không trả lời | Timeout httpx (2,5 giây) | Retry backoff (0.5 → 1 → 2 giây, mặc định 1 lần), giữ `message_id` | `POST /fault` của mock: delay 10 giây |
 | Agent đích down | ConnectError / 5xx sau retry | Failover sang agent khác cùng capability | Tắt mock agent |
 | Không còn agent nào | Danh sách rỗng | Trả **partial result** + `missing: [capability]` | Tắt hết Finance agent |
 | Registry down | Lỗi kết nối Team 1 | Dùng `agent_cache` hoặc Redis cache | Đổi `base_url` sai |

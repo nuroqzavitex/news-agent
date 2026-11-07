@@ -33,7 +33,9 @@ def normalize_paragraphs(text: str | None) -> str:
 def strip_html(text: str | None) -> str:
     if not text:
         return ""
-    return normalize_text(html.unescape(_TAG_RE.sub(" ", text)))
+    # Some feeds escape twice ("&amp;apos;"), which can also hide tags, so unescape before and after removing tags.
+    unescaped = html.unescape(html.unescape(text))
+    return normalize_text(_TAG_RE.sub(" ", unescaped))
 
 
 def canonical_url(url: str) -> str:

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { AgentStatus, AgentStatusFallback } from "@/components/agent-status";
+import { MainNav } from "@/components/main-nav";
 
 import "./globals.css";
 
@@ -27,11 +28,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/news" className="text-lg font-bold tracking-tight">
               News Agent
             </Link>
-            <nav aria-label="Trang chính" className="flex gap-5 text-sm font-medium">
-              <Link href="/news" className="text-ink underline decoration-action decoration-2 underline-offset-8">
-                Tin tức
-              </Link>
-            </nav>
+            <Suspense fallback={<div className="h-5 w-32" />}>
+              <MainNav />
+            </Suspense>
             <div className="ml-auto">
               <Suspense fallback={<AgentStatusFallback />}>
                 <AgentStatus />

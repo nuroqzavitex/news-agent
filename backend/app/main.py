@@ -13,16 +13,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
 from app.agent.capabilities import load_builtin_capabilities
+from app.agent.client import AgentClient
+from app.agent.coordinator import Coordinator
 from app.agent.dedup import Dedup
 from app.agent.handler import MessageHandler
 from app.api import agent_routes
-from app.api.ui_routes import articles, observability
+from app.api.ui_routes import articles, coordination, observability
 from app.db.repositories import SqlMessageLog, SqlTraceSink
 from app.db.session import make_engine, make_session_factory
 from app.factory import build_infra
 from app.logging_setup import setup_logging
 from app.services.health import compute_health
 from app.services.llm import GeminiClient
+from app.services.memory import KnowledgeStore
 from app.services.search import SearchService
 from app.services.tracing import TraceRecorder
 from app.settings import Settings, get_settings
@@ -47,21 +50,49 @@ def build_state(settings: Settings) -> AppState:
     )
     search = SearchService(sessions, llm, redis, query_embed_timeout_s=settings.query_embed_timeout_s)
     tracer = TraceRecorder(settings.agent_id, infra.tracer, SqlTraceSink(sessions))
+    message_log = SqlMessageLog(sessions)
+    deps = {
+        "search": search, "sessions": sessions, "redis": redis, "llm": llm, "tracer": tracer, "settings": settings,
+    }
     handler = MessageHandler(
         agent_id=settings.agent_id,
         identity=infra.identity,
         dedup=Dedup(redis, reply_ttl_s=settings.dedup_ttl_s,
                     processing_ttl_s=int(settings.capability_timeout_s * 3)),
         capabilities=capabilities,
-        message_log=SqlMessageLog(sessions),
+        message_log=message_log,
         tracer=tracer,
         capability_timeout_s=settings.capability_timeout_s,
-        deps={
-            "search": search, "sessions": sessions, "redis": redis, "llm": llm, "tracer": tracer, "settings": settings,
-        },
+        deps=deps,
+    )
+    client = AgentClient(
+        agent_id=settings.agent_id,
+        registry=infra.registry,
+        broker=infra.broker,
+        identity=infra.identity,
+        tracer=tracer,
+        message_log=message_log,
+        sessions=sessions,
+        redis=redis,
+        call_timeout_s=settings.agent_call_timeout_s,
+        retries=settings.agent_call_retries,
+        deadline_s=settings.agent_call_deadline_s,
+    )
+    memory = KnowledgeStore(sessions)
+    coordinator = Coordinator(
+        agent_id=settings.agent_id,
+        capabilities=capabilities,
+        deps=deps,
+        client=client,
+        memory=memory,
+        llm=llm,
+        tracer=tracer,
+        llm_timeout_s=settings.llm_timeout_s,
+        capability_timeout_s=settings.capability_timeout_s,
     )
     return AppState(settings=settings, engine=engine, sessions=sessions, redis=redis, http=http,
-                    infra=infra, capabilities=capabilities, search=search, tracer=tracer, handler=handler)
+                    infra=infra, capabilities=capabilities, search=search, tracer=tracer, handler=handler,
+                    client=client, memory=memory, coordinator=coordinator)
 
 
 async def _heartbeat_loop(state: AppState) -> None:
@@ -110,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(agent_routes.router)
     app.include_router(articles.router)
     app.include_router(observability.router)
+    app.include_router(coordination.router)
     return app
 
 

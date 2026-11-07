@@ -16,10 +16,30 @@ docker compose up -d --build
 This starts `postgres` (pgvector), `redis`, `migrate` (runs alembic and seeds 6 RSS sources), `agent-api` (port 8008),
 `crawler`, `processor`, `scheduler`, `enricher` and `frontend` (port 3000). After about a minute the DB holds a few hundred articles.
 
-- Dashboard: http://localhost:3000/news
+- Dashboard: http://localhost:3000/news and http://localhost:3000/ask
 - Swagger: http://localhost:8008/docs
 - Agent Card: http://localhost:8008/card
 - Health: http://localhost:8008/health
+
+### Mock agents
+
+Other teams' agents are replaced by three mock agents with made-up data (marked `"mock": true`): two finance agents that
+disagree on prices on purpose, and a weather agent. `.env.example` enables them; without a `.env`, run:
+
+```bash
+COMPOSE_PROFILES=mock LOCAL_REGISTRY_FILE=local_registry.mock.yaml docker compose up -d --build
+```
+
+Inject faults to see retry and failover, then look at the trace of the next answer:
+
+```bash
+curl -X POST localhost:9001/fault -H 'content-type: application/json' -d '{"delay_s": 10}'     # mock-finance-a: slow
+curl -X POST localhost:9001/fault -H 'content-type: application/json' -d '{"fail_status": 503}' # mock-finance-a: failing
+curl -X POST localhost:9001/fault -H 'content-type: application/json' -d '{}'                   # back to normal
+curl localhost:9001/stats                                                                       # messages it received
+```
+
+Answers are remembered (`stock_price` for 15 minutes), so ask about another ticker to reach the agents again.
 
 ### Gemini API key (optional)
 
@@ -31,6 +51,8 @@ Everything runs without a key, on non-LLM fallbacks:
 | `news_summary` (`generated_by`) | LLM summary | First sentences of the top articles, confidence 0.3 |
 | `sentiment` | LLM | Keyword lexicon (rough) |
 | `trending_topics` | Same | Same (never uses the LLM) |
+| `/ask` planning (`planned_by`) | LLM | Rules: tickers, weather, trending, topic keywords |
+| `/ask` answer (`generated_by`) | LLM | Sentences built from the results |
 
 To enable it, set `GEMINI_API_KEY` in `.env` and run `docker compose up -d`. The `enricher` then processes existing
 articles too, 20 per batch with a 10-second pause (`ENRICH_INTERVAL_S`). `/health` reports `deps.llm`.
@@ -93,6 +115,8 @@ backend/app/
   contracts.py  ports.py  factory.py     # shared contract + 4 infrastructure ports + adapter selection
   adapters/local/                        # registry (YAML) · broker (direct HTTP) · identity (HMAC) · tracer (log)
   agent/handler.py  dedup.py             # auth → dedup (Redis) → dispatch (timeout) → persist + trace
+  agent/client.py                        # call other agents: discovery, retry, fan-out, failover
+  agent/planner.py  coordinator.py       # question → capability calls in parallel → one answer, partial if need be
   agent/capabilities/                    # @capability: news_search, news_summary, sentiment, trending_topics
   api/                                   # /card /health /messages + /api/v1/*
   services/                              # llm (Gemini), search (FTS + pgvector), sentiment, trending, textproc, politeness, ...
@@ -100,6 +124,7 @@ backend/app/
   db/                                    # models + repositories;  migrations/ (alembic)
 frontend/src/
   app/news/                              # /news (crawl grid, search, results) and /news/[id]
+  app/ask/                               # ask a question, see which agents answered
   components/  lib/api.ts                # UI pieces; typed server-side client for agent-api
 docs/adr/                                # architecture decision records
 ```
@@ -114,7 +139,7 @@ remote adapters.
 |---|---|---|
 | 1. Finish M1 | CI, integration tests, Next.js shell, `/news` | ✅ Done |
 | 2. AI & knowledge | Gemini embeddings, hybrid search, `news_summary`, `sentiment`, `trending_topics` with non-LLM fallbacks | ✅ Done (Gemini calls not yet tried with a real key) |
-| 3. Coordination | Mock agents (finance ×2, weather), `AgentClient` (retry, failover), coordinator, planner, `/ask`, knowledge memory | ⏳ |
+| 3. Coordination | Mock agents (finance ×2, weather), `AgentClient` (retry, failover), coordinator, planner, `/ask`, knowledge memory | ✅ Done |
 | 4. Reliability & observability | Fault injection, spec §9 fault tests, metrics, admin login, `/`, `/messages` + traces, `/network`, `/faults` | ⏳ |
 | 5. Demo ready | Scripted run of the 7 demo scenarios (spec §12), `docs/contract.md` | ⏳ |
 | Later | Remote adapters for Teams 1–4, public deployment, real cross-team runs | — |

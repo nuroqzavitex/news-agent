@@ -8,6 +8,8 @@ export type SearchHit = Schemas["SearchHit"];
 export type ArticleDetail = Schemas["ArticleDetail"];
 export type SourceOut = Schemas["SourceOut"];
 export type CrawlGrid = Schemas["CrawlGrid"];
+export type AskResult = Schemas["AskResult"];
+export type StepResult = Schemas["StepResult"];
 
 export type Health = {
   status: "online" | "degraded" | "offline";
@@ -76,6 +78,15 @@ export const api = {
   },
   sources: () => getJson<SourceOut[]>("/api/v1/sources"),
   crawlGrid: (hours = 24) => getJson<CrawlGrid>("/api/v1/stats/crawl-grid", { hours }),
+  ask: async (question: string): Promise<AskResult> => {
+    const res = await request("/api/v1/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    if (!res.ok) throw new Error(`ask failed with HTTP ${res.status}`);
+    return res.json() as Promise<AskResult>;
+  },
   triggerCrawl: async (sourceCode?: string): Promise<string[]> => {
     const res = await request("/api/v1/crawl/trigger", {
       method: "POST",

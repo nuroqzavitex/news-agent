@@ -50,6 +50,7 @@ class MessageLog(Protocol):
         status: str,
         latency_ms: int | None = None,
         error: str | None = None,
+        attempts: int | None = None,
     ) -> None: ...
 
 

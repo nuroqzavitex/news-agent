@@ -1,0 +1,17 @@
+# Mock agents of the compose profile `mock`. Enable with LOCAL_REGISTRY_FILE=local_registry.mock.yaml.
+agents:
+  - agent_id: mock-finance-a
+    group_id: mock
+    domain: finance
+    capabilities: [stock_price]
+    endpoint: http://mock-finance-a:9001
+  - agent_id: mock-finance-b
+    group_id: mock
+    domain: finance
+    capabilities: [stock_price]
+    endpoint: http://mock-finance-b:9001
+  - agent_id: mock-weather
+    group_id: mock
+    domain: weather
+    capabilities: [weather]
+    endpoint: http://mock-weather:9001

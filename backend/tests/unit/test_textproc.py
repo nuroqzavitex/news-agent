@@ -29,6 +29,7 @@ def test_canonical_url_drops_tracking_and_fragment():
 def test_strip_html():
     raw = '<a href="x"><img src="y"/></a></br>Giá vàng &amp; USD   tăng'
     assert strip_html(raw) == "Giá vàng & USD tăng"
+    assert strip_html("&amp;apos;vua thép&amp;apos; &amp;lt;b&amp;gt;mới&amp;lt;/b&amp;gt;") == "'vua thép' mới"
 
 
 def test_normalize_paragraphs_keeps_breaks_and_collapses_spaces():

@@ -27,6 +27,7 @@ class SqlMessageLog:
         status: str,
         latency_ms: int | None = None,
         error: str | None = None,
+        attempts: int | None = None,
     ) -> None:
         values = {
             "message_id": envelope.message_id,
@@ -42,6 +43,7 @@ class SqlMessageLog:
             "status": status,
             "latency_ms": latency_ms,
             "error": error,
+            "attempts": attempts or 1,
         }
         stmt = insert(Message).values(**values)
         stmt = stmt.on_conflict_do_update(
@@ -50,6 +52,7 @@ class SqlMessageLog:
                 "status": stmt.excluded.status,
                 "latency_ms": func.coalesce(stmt.excluded.latency_ms, Message.latency_ms),
                 "error": func.coalesce(stmt.excluded.error, Message.error),
+                "attempts": func.greatest(stmt.excluded.attempts, Message.attempts),
                 "updated_at": func.now(),
             },
         )

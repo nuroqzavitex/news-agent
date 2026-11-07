@@ -22,7 +22,10 @@ class DirectHttpBroker:
             raise InfraError(f"cannot reach {target.agent_id}: {exc}") from exc
         if resp.status_code >= 500:
             raise InfraError(f"{target.agent_id} returned {resp.status_code}")
-        return Envelope.model_validate(resp.json())
+        try:
+            return Envelope.model_validate(resp.json())
+        except ValueError as exc:  # not JSON, or not an envelope (pydantic's ValidationError is a ValueError)
+            raise InfraError(f"{target.agent_id} sent an unreadable reply") from exc
 
     async def ping(self) -> bool:
         return True
