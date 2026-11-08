@@ -82,6 +82,24 @@ uv run python -m scripts.send trending_topics '{"window": "24h", "limit": 10}'
 ```
 
 In local mode, tokens are HMAC-signed with `LOCAL_SHARED_SECRET` (see `app/adapters/local/identity.py`).
+The message format, error codes, retry rules and capability schemas other teams need are in
+[`docs/contract.md`](docs/contract.md) (in Vietnamese, for the class).
+
+## Demo: the 7 acceptance scenarios (spec §12)
+
+With the stack running with the mock agents (`COMPOSE_PROFILES=mock`, the default in `.env.example`):
+
+```bash
+cd backend
+uv run python -m scripts.demo                  # discover, serve, coordinate, learn, conflict, survive, trace
+uv run python -m scripts.demo --only 3,7       # some scenarios
+uv run python -m scripts.demo --skip-faults    # without scenario 6 (needs FAULTS_ENABLED=true and the admin password)
+```
+
+Each scenario prints what happened and checks it; the exit code is non-zero when a check fails. Scenario 6 switches
+the §9 faults on one at a time (slow and failing mock agents, Registry, Identity, Observability, Gemini, this agent
+itself) and switches them all off at the end. A stopped crawler is the only fault left to try by hand
+(`docker compose stop crawler`). Against a deployment, pass `--api`, `--dashboard` and `--password`.
 
 ## Backend development
 
@@ -138,6 +156,8 @@ frontend/src/
   app/page.tsx  messages/  traces/[id]/  # overview with metrics; message log; trace waterfall
   app/network/  faults/  login/          # agent graph and test messages; fault lab; admin login
   components/  lib/api.ts                # UI pieces; typed server-side client for agent-api
+backend/scripts/                         # send (test message), demo (spec §12 scenarios), mock_agent, seed, refetch
+docs/contract.md                         # agent contract proposed to the class
 docs/adr/                                # architecture decision records
 ```
 
@@ -153,5 +173,5 @@ remote adapters.
 | 2. AI & knowledge | Gemini embeddings, hybrid search, `news_summary`, `sentiment`, `trending_topics` with non-LLM fallbacks | ✅ Done (Gemini calls not yet tried with a real key) |
 | 3. Coordination | Mock agents (finance ×2, weather), `AgentClient` (retry, failover), coordinator, planner, `/ask`, knowledge memory | ✅ Done |
 | 4. Reliability & observability | Fault injection, spec §9 fault tests, metrics, admin login, `/`, `/messages` + traces, `/network`, `/faults` | ✅ Done |
-| 5. Demo ready | Scripted run of the 7 demo scenarios (spec §12), `docs/contract.md` | ⏳ |
+| 5. Demo ready | Scripted run of the 7 demo scenarios (spec §12), `docs/contract.md` | ✅ Done |
 | Later | Remote adapters for Teams 1–4, public deployment, real cross-team runs | — |
