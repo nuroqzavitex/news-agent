@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import { askAgent, type AskState } from "@/app/ask/actions";
@@ -119,9 +120,9 @@ function Answer({ result }: { result: AskResult }) {
             ))}
           </tbody>
         </table>
-        <p className="mt-3 text-xs text-muted">
-          Mã trace: <code>{result.trace_id}</code>
-        </p>
+        <Link href={`/traces/${result.trace_id}`} className="mt-3 inline-block text-sm font-medium text-action hover:underline">
+          Xem trace: các agent đã được gọi thế nào
+        </Link>
       </div>
     </section>
   );

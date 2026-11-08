@@ -81,4 +81,5 @@ async def compute_health(state: AppState) -> dict[str, Any]:
         "freshness": last_crawl.isoformat() if last_crawl else None,
         "deps": deps,
         "modes": infra.modes,
+        "faults": (await state.faults.get()).active(),
     }

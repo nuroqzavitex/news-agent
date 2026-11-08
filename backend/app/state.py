@@ -15,6 +15,8 @@ from app.agent.coordinator import Coordinator
 from app.agent.handler import MessageHandler
 from app.contracts import AgentCard
 from app.factory import Infra
+from app.services.admin_auth import AdminAuth
+from app.services.faults import FaultSwitch
 from app.services.memory import KnowledgeStore
 from app.services.search import SearchService
 from app.services.tracing import TraceRecorder
@@ -36,6 +38,8 @@ class AppState:
     client: AgentClient
     memory: KnowledgeStore
     coordinator: Coordinator
+    faults: FaultSwitch
+    admin: AdminAuth
     started_at: float = field(default_factory=time.time)
 
     def card(self, status: str = "online") -> AgentCard:

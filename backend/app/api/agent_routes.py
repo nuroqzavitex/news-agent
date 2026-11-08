@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -31,6 +32,13 @@ async def health(state: AppState = Depends(get_state)) -> JSONResponse:
 
 @router.post("/messages")
 async def messages(request: Request, state: AppState = Depends(get_state)) -> JSONResponse:
+    faults = await state.faults.get()
+    if faults.inbound_delay_s:
+        await asyncio.sleep(faults.inbound_delay_s)
+    if faults.inbound_fail_status:
+        return JSONResponse(
+            {"error": "unavailable", "message": "fault injected"}, status_code=faults.inbound_fail_status
+        )
     raw: Any
     try:
         raw = await request.json()

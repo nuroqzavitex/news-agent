@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import Article, ArticleChunk
 from app.services.embedding import chunk_text, document_text
+from app.services.faults import FaultSwitch
 from app.services.llm import GeminiClient, LLMBadOutput, LLMBadRequest, LLMError
 from app.services.sentiment import Sentiment, lexicon_sentiment, llm_sentiments
 from app.workers.runtime import WorkerContext, run_worker
@@ -121,6 +122,7 @@ async def main(ctx: WorkerContext) -> None:
         llm_model=ctx.settings.llm_model,
         embedding_model=ctx.settings.embedding_model,
         redis=ctx.redis,
+        faults=FaultSwitch(ctx.redis, ctx.settings.faults_enabled),
     )
     if not llm.configured:
         log.info("GEMINI_API_KEY is not set: filling in lexicon sentiment only")

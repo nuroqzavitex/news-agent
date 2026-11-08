@@ -211,6 +211,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metrics */
+        get: operations["metrics_api_v1_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/network": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Network */
+        get: operations["network_api_v1_network_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ask": {
         parameters: {
             query?: never;
@@ -256,6 +290,115 @@ export interface paths {
         get: operations["memory_versions_api_v1_memory__key__versions_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login */
+        post: operations["login_api_v1_admin_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session */
+        get: operations["session_api_v1_admin_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/faults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Faults */
+        get: operations["get_faults_api_v1_admin_faults_get"];
+        /** Set Faults */
+        put: operations["set_faults_api_v1_admin_faults_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Mocks
+         * @description Mock agents and their current faults. Only mocks (group "mock") can be controlled from here.
+         */
+        get: operations["list_mocks_api_v1_admin_mocks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mocks/{agent_id}/fault": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Mock Fault */
+        put: operations["set_mock_fault_api_v1_admin_mocks__agent_id__fault_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/agents/call": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Call Agent
+         * @description Send a test message to one specific agent, as this agent, through the real client (retry included).
+         */
+        post: operations["call_agent_api_v1_admin_agents_call_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -356,6 +499,66 @@ export interface components {
             /** Has Stale Data */
             has_stale_data: boolean;
         };
+        /** Bucket */
+        Bucket: {
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /** Requests */
+            requests: number;
+            /** Errors */
+            errors: number;
+            /** P95 Ms */
+            p95_ms: number | null;
+        };
+        /** CallRequest */
+        CallRequest: {
+            /** Agent Id */
+            agent_id: string;
+            /** Capability */
+            capability: string;
+            /**
+             * Payload
+             * @default {}
+             */
+            payload: {
+                [key: string]: unknown;
+            };
+        };
+        /** CallResponse */
+        CallResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Agent Id */
+            agent_id: string;
+            /** Trace Id */
+            trace_id: string;
+            /** Attempts */
+            attempts: number;
+            /** Latency Ms */
+            latency_ms: number | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error: string | null;
+        };
+        /** CapabilityLatency */
+        CapabilityLatency: {
+            /** Capability */
+            capability: string;
+            /** Requests */
+            requests: number;
+            /** Errors */
+            errors: number;
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+        };
         /** ConflictingValue */
         ConflictingValue: {
             /** Agent */
@@ -376,6 +579,48 @@ export interface components {
         CrawlTrigger: {
             /** Source Code */
             source_code?: string | null;
+        };
+        /** FaultConfig */
+        FaultConfig: {
+            /**
+             * Inbound Delay S
+             * @description Delay before answering /messages
+             * @default 0
+             */
+            inbound_delay_s: number;
+            /**
+             * Inbound Fail Status
+             * @description Answer /messages with this
+             */
+            inbound_fail_status?: number | null;
+            /**
+             * Llm Down
+             * @default false
+             */
+            llm_down: boolean;
+            /**
+             * Registry Down
+             * @default false
+             */
+            registry_down: boolean;
+            /**
+             * Identity Down
+             * @default false
+             */
+            identity_down: boolean;
+            /**
+             * Tracer Down
+             * @default false
+             */
+            tracer_down: boolean;
+        };
+        /** FaultState */
+        FaultState: {
+            /** Enabled */
+            enabled: boolean;
+            config: components["schemas"]["FaultConfig"];
+            /** Active */
+            active: string[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -411,6 +656,18 @@ export interface components {
             superseded_by: number | null;
             /** Conflict Group */
             conflict_group: string | null;
+        };
+        /** LoginRequest */
+        LoginRequest: {
+            /** Password */
+            password: string;
+        };
+        /** LoginResponse */
+        LoginResponse: {
+            /** Token */
+            token: string;
+            /** Expires In S */
+            expires_in_s: number;
         };
         /** MessageOut */
         MessageOut: {
@@ -461,6 +718,103 @@ export interface components {
             items: components["schemas"]["MessageOut"][];
             /** Total */
             total: number;
+        };
+        /** Metrics */
+        Metrics: {
+            /** Window Minutes */
+            window_minutes: number;
+            /** Inbound Requests */
+            inbound_requests: number;
+            /** Requests Per Minute */
+            requests_per_minute: number;
+            /** Error Rate */
+            error_rate: number;
+            /** P50 Ms */
+            p50_ms: number | null;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Outbound Calls */
+            outbound_calls: number;
+            /** Outbound Failed */
+            outbound_failed: number;
+            /** Retries */
+            retries: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Rejected */
+            rejected: number;
+            /** By Capability */
+            by_capability: components["schemas"]["CapabilityLatency"][];
+            /** Series */
+            series: components["schemas"]["Bucket"][];
+        };
+        /** MockAgentState */
+        MockAgentState: {
+            /** Agent Id */
+            agent_id: string;
+            /** Capabilities */
+            capabilities: string[];
+            /** Reachable */
+            reachable: boolean;
+            fault: components["schemas"]["MockFault"] | null;
+        };
+        /** MockFault */
+        MockFault: {
+            /**
+             * Delay S
+             * @default 0
+             */
+            delay_s: number;
+            /** Fail Status */
+            fail_status?: number | null;
+            /** Fail Times */
+            fail_times?: number | null;
+        };
+        /** Network */
+        Network: {
+            /** Window Minutes */
+            window_minutes: number;
+            /** Registry Ok */
+            registry_ok: boolean;
+            /** Nodes */
+            nodes: components["schemas"]["NetworkNode"][];
+            /** Edges */
+            edges: components["schemas"]["NetworkEdge"][];
+        };
+        /** NetworkEdge */
+        NetworkEdge: {
+            /** Peer */
+            peer: string;
+            /** Direction */
+            direction: string;
+            /** Messages */
+            messages: number;
+            /** Failed */
+            failed: number;
+            /** Avg Latency Ms */
+            avg_latency_ms: number | null;
+            /**
+             * Last At
+             * Format: date-time
+             */
+            last_at: string;
+        };
+        /** NetworkNode */
+        NetworkNode: {
+            /** Agent Id */
+            agent_id: string;
+            /** Domain */
+            domain: string;
+            /** Capabilities */
+            capabilities: string[];
+            /** Endpoint */
+            endpoint: string;
+            /** Status */
+            status: string;
+            /** Is Self */
+            is_self: boolean;
+            /** Source */
+            source: string;
         };
         /** SearchHit */
         SearchHit: {
@@ -929,6 +1283,68 @@ export interface operations {
             };
         };
     };
+    metrics_api_v1_metrics_get: {
+        parameters: {
+            query?: {
+                window_minutes?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Metrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    network_api_v1_network_get: {
+        parameters: {
+            query?: {
+                window_minutes?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Network"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ask_api_v1_ask_post: {
         parameters: {
             query?: never;
@@ -1012,6 +1428,241 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_v1_admin_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_api_v1_admin_session_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_faults_api_v1_admin_faults_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FaultState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_faults_api_v1_admin_faults_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FaultConfig"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FaultState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mocks_api_v1_admin_mocks_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockAgentState"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_mock_fault_api_v1_admin_mocks__agent_id__fault_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MockFault"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockFault"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    call_agent_api_v1_admin_agents_call_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallResponse"];
                 };
             };
             /** @description Validation Error */

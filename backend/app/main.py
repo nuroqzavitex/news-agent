@@ -18,11 +18,13 @@ from app.agent.coordinator import Coordinator
 from app.agent.dedup import Dedup
 from app.agent.handler import MessageHandler
 from app.api import agent_routes
-from app.api.ui_routes import articles, coordination, observability
+from app.api.ui_routes import admin, articles, coordination, observability
 from app.db.repositories import SqlMessageLog, SqlTraceSink
 from app.db.session import make_engine, make_session_factory
 from app.factory import build_infra
 from app.logging_setup import setup_logging
+from app.services.admin_auth import AdminAuth
+from app.services.faults import FaultSwitch
 from app.services.health import compute_health
 from app.services.llm import GeminiClient
 from app.services.memory import KnowledgeStore
@@ -39,7 +41,8 @@ def build_state(settings: Settings) -> AppState:
     sessions = make_session_factory(engine)
     redis = Redis.from_url(settings.redis_url)
     http = httpx.AsyncClient(headers={"User-Agent": settings.http_user_agent})
-    infra = build_infra(settings, http)
+    faults = FaultSwitch(redis, settings.faults_enabled)
+    infra = build_infra(settings, http, faults, redis)
     capabilities = load_builtin_capabilities()
     llm = GeminiClient(
         api_key=settings.gemini_api_key,
@@ -47,6 +50,7 @@ def build_state(settings: Settings) -> AppState:
         llm_model=settings.llm_model,
         embedding_model=settings.embedding_model,
         redis=redis,
+        faults=faults,
     )
     search = SearchService(sessions, llm, redis, query_embed_timeout_s=settings.query_embed_timeout_s)
     tracer = TraceRecorder(settings.agent_id, infra.tracer, SqlTraceSink(sessions))
@@ -92,7 +96,8 @@ def build_state(settings: Settings) -> AppState:
     )
     return AppState(settings=settings, engine=engine, sessions=sessions, redis=redis, http=http,
                     infra=infra, capabilities=capabilities, search=search, tracer=tracer, handler=handler,
-                    client=client, memory=memory, coordinator=coordinator)
+                    client=client, memory=memory, coordinator=coordinator, faults=faults,
+                    admin=AdminAuth(settings.admin_password, settings.local_shared_secret))
 
 
 async def _heartbeat_loop(state: AppState) -> None:
@@ -142,6 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(articles.router)
     app.include_router(observability.router)
     app.include_router(coordination.router)
+    app.include_router(admin.router)
     return app
 
 

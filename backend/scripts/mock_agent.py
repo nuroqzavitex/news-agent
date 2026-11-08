@@ -105,6 +105,10 @@ def create_mock_app(
     async def health() -> dict[str, str]:
         return {"status": "online", "agent_id": agent_id}
 
+    @app.get("/fault")
+    async def get_fault() -> Fault:
+        return state.fault
+
     @app.post("/fault")
     async def set_fault(fault: Fault) -> Fault:
         state.fault = fault

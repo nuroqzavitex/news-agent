@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 
 from app.api.deps import get_state
 from app.contracts import AgentCard
-from app.db.models import Message, TraceEvent
+from app.db.models import AgentCache, Message, TraceEvent
+from app.services.metrics import Metrics, compute_metrics
 from app.state import AppState
 
 router = APIRouter(prefix="/api/v1", tags=["observability"])
@@ -108,3 +109,80 @@ async def infra_status(state: AppState = Depends(get_state)) -> dict[str, Any]:
             ok = False
         result[name] = {"mode": infra.modes[name], "ok": ok}
     return result
+
+
+@router.get("/metrics", response_model=Metrics)
+async def metrics(
+    window_minutes: int = Query(default=60, ge=5, le=24 * 60), state: AppState = Depends(get_state)
+) -> Metrics:
+    return await compute_metrics(state.sessions, window_minutes)
+
+
+class NetworkNode(BaseModel):
+    agent_id: str
+    domain: str
+    capabilities: list[str]
+    endpoint: str
+    status: str
+    is_self: bool
+    source: str  # self | registry | cache (registry unreachable: last known card)
+
+
+class NetworkEdge(BaseModel):
+    peer: str
+    direction: str  # outbound: this agent called the peer; inbound: the peer called this agent
+    messages: int
+    failed: int
+    avg_latency_ms: float | None
+    last_at: datetime
+
+
+class Network(BaseModel):
+    window_minutes: int
+    registry_ok: bool
+    nodes: list[NetworkNode]
+    edges: list[NetworkEdge]
+
+
+@router.get("/network", response_model=Network)
+async def network(
+    window_minutes: int = Query(default=60, ge=5, le=24 * 60), state: AppState = Depends(get_state)
+) -> Network:
+    me = state.card()
+    nodes = [NetworkNode(**me.model_dump(exclude={"group_id", "version"}), is_self=True, source="self")]
+    registry_ok = True
+    try:
+        cards = [(c, "registry") for c in await state.infra.registry.list_agents() if c.agent_id != me.agent_id]
+    except Exception:  # noqa: BLE001 — show what is known instead
+        registry_ok = False
+        async with state.sessions() as s:
+            cached = (await s.scalars(select(AgentCache))).all()
+        cards = [(AgentCard.model_validate(c.card), "cache") for c in cached]
+    nodes += [
+        NetworkNode(**c.model_dump(exclude={"group_id", "version"}), is_self=False, source=source)
+        for c, source in cards
+    ]
+
+    peer = case((Message.direction == "outbound", Message.to_agent), else_=Message.from_agent).label("peer")
+    since = datetime.now(UTC) - timedelta(minutes=window_minutes)
+    async with state.sessions() as s:
+        rows = (
+            await s.execute(
+                select(
+                    peer,
+                    Message.direction,
+                    func.count(),
+                    func.count().filter(Message.status == "failed"),
+                    func.avg(Message.latency_ms),
+                    func.max(Message.updated_at),
+                )
+                .where(Message.type == "request", Message.created_at >= since)
+                .group_by(peer, Message.direction)
+            )
+        ).all()
+    edges = [
+        NetworkEdge(peer=p, direction=d, messages=n, failed=f, avg_latency_ms=round(a, 1) if a else None, last_at=t)
+        for p, d, n, f, a, t in rows
+        if p != me.agent_id
+    ]
+    return Network(window_minutes=window_minutes, registry_ok=registry_ok, nodes=nodes, edges=edges)

@@ -10,6 +10,15 @@ export type SourceOut = Schemas["SourceOut"];
 export type CrawlGrid = Schemas["CrawlGrid"];
 export type AskResult = Schemas["AskResult"];
 export type StepResult = Schemas["StepResult"];
+export type Metrics = Schemas["Metrics"];
+export type Network = Schemas["Network"];
+export type MessageOut = Schemas["MessageOut"];
+export type MessagePage = Schemas["MessagePage"];
+export type TraceEvent = Schemas["TraceEventOut"];
+export type FaultState = Schemas["FaultState"];
+export type FaultConfig = Schemas["FaultConfig"];
+export type MockAgentState = Schemas["MockAgentState"];
+export type CallResponse = Schemas["CallResponse"];
 
 export type Health = {
   status: "online" | "degraded" | "offline";
@@ -18,6 +27,7 @@ export type Health = {
   freshness: string | null;
   deps: Record<string, string>;
   modes: Record<string, string>;
+  faults: string[];
 };
 
 /** Server-side base URL of agent-api. Inside Docker this is the service name, not localhost. */
@@ -41,7 +51,7 @@ function buildUrl(path: string, query?: Query): URL {
   return url;
 }
 
-async function request(path: string, init?: RequestInit & { query?: Query }): Promise<Response> {
+export async function request(path: string, init?: RequestInit & { query?: Query }): Promise<Response> {
   try {
     return await fetch(buildUrl(path, init?.query), init);
   } catch {
@@ -77,6 +87,18 @@ export const api = {
     return res.json() as Promise<ArticleDetail>;
   },
   sources: () => getJson<SourceOut[]>("/api/v1/sources"),
+  metrics: (windowMinutes = 60) => getJson<Metrics>("/api/v1/metrics", { window_minutes: windowMinutes }),
+  network: (windowMinutes = 60) => getJson<Network>("/api/v1/network", { window_minutes: windowMinutes }),
+  messages: (query: {
+    direction?: string;
+    status?: string;
+    peer?: string;
+    capability?: string;
+    trace_id?: string;
+    page?: number;
+    page_size?: number;
+  }) => getJson<MessagePage>("/api/v1/messages", query),
+  trace: (traceId: string) => getJson<TraceEvent[]>(`/api/v1/traces/${encodeURIComponent(traceId)}`),
   crawlGrid: (hours = 24) => getJson<CrawlGrid>("/api/v1/stats/crawl-grid", { hours }),
   ask: async (question: string): Promise<AskResult> => {
     const res = await request("/api/v1/ask", {

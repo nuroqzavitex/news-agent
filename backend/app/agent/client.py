@@ -153,6 +153,13 @@ class AgentClient:
             self._collect(outcome, await ask(agent))
         return outcome
 
+    async def call_agent(
+        self, agent: AgentCard, capability: str, payload: dict[str, Any], *, trace_id: str
+    ) -> AgentReply | AgentFailure:
+        """Call one specific agent (dashboard test messages), with the usual retry."""
+        deadline = time.monotonic() + self._deadline
+        return await self._ask_with_retry(agent, capability, payload, trace_id, new_id("conv"), deadline)
+
     @staticmethod
     def _collect(outcome: CallOutcome, result: AgentReply | AgentFailure) -> None:
         if isinstance(result, AgentReply):

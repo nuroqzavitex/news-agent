@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import httpx
+from redis.asyncio import Redis
 
+from app.adapters.caching_identity import CachingIdentity
 from app.adapters.local.broker import DirectHttpBroker
 from app.adapters.local.identity import LocalIdentity
 from app.adapters.local.registry import LocalRegistry
 from app.adapters.local.tracer import LogTracer
 from app.ports import BrokerPort, IdentityPort, RegistryPort, TracerPort
+from app.services.faults import FaultSwitch, FaultyIdentity, FaultyRegistry, FaultyTracer, PassThroughBroker
 from app.settings import Settings
 
 
@@ -30,7 +33,9 @@ def _remote_not_ready(port: str, team: str) -> NotImplementedError:
     )
 
 
-def build_infra(settings: Settings, http: httpx.AsyncClient) -> Infra:
+def build_infra(
+    settings: Settings, http: httpx.AsyncClient, faults: FaultSwitch | None = None, redis: Redis | None = None
+) -> Infra:
     if settings.registry_mode == "remote":
         raise _remote_not_ready("registry", "Team 1")
     if settings.broker_mode == "remote":
@@ -40,11 +45,23 @@ def build_infra(settings: Settings, http: httpx.AsyncClient) -> Infra:
     if settings.tracer_mode == "remote":
         raise _remote_not_ready("tracer", "Team 4")
 
+    registry: RegistryPort = LocalRegistry(settings.local_registry_file)
+    broker: BrokerPort = DirectHttpBroker(http)
+    identity: IdentityPort = LocalIdentity(settings.local_shared_secret)
+    tracer: TracerPort = LogTracer()
+    if faults is not None and faults.enabled:
+        registry = FaultyRegistry(registry, faults)
+        broker = PassThroughBroker(broker)
+        identity = FaultyIdentity(identity, faults)
+        tracer = FaultyTracer(tracer, faults)
+    if redis is not None:
+        identity = CachingIdentity(identity, redis)
+
     return Infra(
-        registry=LocalRegistry(settings.local_registry_file),
-        broker=DirectHttpBroker(http),
-        identity=LocalIdentity(settings.local_shared_secret),
-        tracer=LogTracer(),
+        registry=registry,
+        broker=broker,
+        identity=identity,
+        tracer=tracer,
         modes={
             "registry": settings.registry_mode,
             "broker": settings.broker_mode,

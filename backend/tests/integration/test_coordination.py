@@ -2,109 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 import pytest
-import yaml
 from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert
 
-from app.db.models import AgentCache, Article, KnowledgeItem, Message
-from app.main import create_app
-from app.settings import Settings
-from app.state import AppState
-from scripts.mock_agent import create_mock_app
+from app.db.models import AgentCache, KnowledgeItem, Message
 from tests.fake_gemini import FakeGemini
-from tests.integration.conftest import TEST_DATABASE_URL, TEST_REDIS_URL
+from tests.integration.conftest import ME, Network
 
 pytestmark = pytest.mark.integration
-
-SECRET = "integration-secret"
-ME = "team-08-news"
-TCB_QUESTION = "Tin tức ảnh hưởng thế nào tới cổ phiếu TCB tuần này?"
-
-
-class TimedTransport(httpx.AsyncBaseTransport):
-    """ASGITransport ignores timeouts; a slow mock must look like a slow network."""
-
-    def __init__(self, app: Any) -> None:
-        self._inner = httpx.ASGITransport(app)
-
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        timeout = request.extensions.get("timeout", {}).get("read")
-        try:
-            return await asyncio.wait_for(self._inner.handle_async_request(request), timeout)
-        except TimeoutError as exc:
-            raise httpx.ReadTimeout("mock took too long", request=request) from exc
-
-
-@dataclass
-class Network:
-    api: httpx.AsyncClient
-    state: AppState
-    mocks: dict[str, Any]
-
-    async def ask(self, question: str = TCB_QUESTION) -> dict[str, Any]:
-        resp = await self.api.post("/api/v1/ask", json={"question": question})
-        assert resp.status_code == 200, resp.text
-        return resp.json()
-
-    def mock(self, name: str):
-        return self.mocks[name].state.mock
-
-    async def events(self, trace_id: str) -> list[dict[str, Any]]:
-        return (await self.api.get(f"/api/v1/traces/{trace_id}")).json()
-
-
-AGENTS = {
-    "mock-finance-a": dict(capabilities=["stock_price"], price_bias=0.0, confidence=0.9),
-    "mock-finance-b": dict(capabilities=["stock_price"], price_bias=0.02, confidence=0.7),
-    "mock-finance-c": dict(capabilities=["stock_price"], price_bias=0.0, confidence=0.6),
-    "mock-weather-a": dict(capabilities=["weather"]),
-    "mock-weather-b": dict(capabilities=["weather"]),
-}
-
-
-@pytest.fixture
-async def network(sessions, redis, tmp_path, monkeypatch):
-    monkeypatch.setattr("app.agent.client.BACKOFF_S", (0.01, 0.01, 0.01))
-    async with sessions() as s:
-        await s.execute(insert(Article).values(
-            {"source_id": 1, "url": "https://news.test/tcb", "url_hash": "tcb", "title": "TCB báo lãi kỷ lục",
-             "summary": "Lợi nhuận TCB tăng trưởng, cổ phiếu TCB phục hồi", "sentiment_label": "positive",
-             "sentiment_score": 0.8, "sentiment_source": "lexicon"}
-        ))
-        await s.commit()
-
-    mocks = {name: create_mock_app(agent_id=name, secret=SECRET, **cfg) for name, cfg in AGENTS.items()}
-    registry_file = tmp_path / "registry.yaml"
-    registry_file.write_text(yaml.safe_dump({"agents": [
-        {"agent_id": name, "group_id": "mock", "domain": "mock", "capabilities": cfg["capabilities"],
-         "endpoint": f"http://{name}"}
-        for name, cfg in AGENTS.items()
-    ]}), encoding="utf-8")
-
-    settings = Settings(
-        _env_file=None, database_url=TEST_DATABASE_URL, redis_url=TEST_REDIS_URL, agent_id=ME,
-        local_shared_secret=SECRET, local_registry_file=str(registry_file),
-        agent_call_timeout_s=0.3, agent_call_retries=1, agent_call_deadline_s=5,
-    )
-    app = create_app(settings)
-    state = app.state.agent
-    state.infra.broker._client = httpx.AsyncClient(
-        mounts={f"http://{name}": TimedTransport(m) for name, m in mocks.items()}
-    )
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as api:
-        yield Network(api, state, mocks)
-    await state.infra.broker._client.aclose()
-    await state.http.aclose()
-    await state.redis.aclose()
-    await state.engine.dispose()
-
 
 def step(result: dict[str, Any], capability: str) -> dict[str, Any]:
     return next(s for s in result["steps"] if s["capability"] == capability)

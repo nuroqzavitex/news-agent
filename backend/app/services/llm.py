@@ -15,6 +15,7 @@ import httpx
 from redis.asyncio import Redis
 
 from app.db.models import EMBEDDING_DIM
+from app.services.faults import FaultSwitch
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +53,9 @@ class GeminiClient:
         llm_model: str,
         embedding_model: str,
         redis: Redis | None = None,
+        faults: FaultSwitch | None = None,
     ) -> None:
+        self._faults = faults
         self._key = api_key
         self._http = http
         self.llm_model = llm_model
@@ -104,6 +107,9 @@ class GeminiClient:
     async def _post(self, path: str, body: dict[str, Any], timeout_s: float) -> dict[str, Any]:
         if not self.configured:
             raise LLMNotConfigured("GEMINI_API_KEY is not set")
+        if self._faults is not None and (await self._faults.get()).llm_down:
+            await self._record_failure("fault injected")
+            raise LLMError("Gemini unreachable (fault injected)")
         try:
             resp = await self._http.post(
                 f"{BASE_URL}/{path}", json=body, headers={"x-goog-api-key": self._key}, timeout=timeout_s

@@ -16,7 +16,7 @@ docker compose up -d --build
 This starts `postgres` (pgvector), `redis`, `migrate` (runs alembic and seeds 6 RSS sources), `agent-api` (port 8008),
 `crawler`, `processor`, `scheduler`, `enricher` and `frontend` (port 3000). After about a minute the DB holds a few hundred articles.
 
-- Dashboard: http://localhost:3000/news and http://localhost:3000/ask
+- Dashboard: http://localhost:3000 (overview, news, ask, agent network, message log with traces, fault lab)
 - Swagger: http://localhost:8008/docs
 - Agent Card: http://localhost:8008/card
 - Health: http://localhost:8008/health
@@ -40,6 +40,16 @@ curl localhost:9001/stats                                                       
 ```
 
 Answers are remembered (`stock_price` for 15 minutes), so ask about another ticker to reach the agents again.
+
+### Fault lab (spec §9)
+
+http://localhost:3000/faults needs the admin password (`ADMIN_PASSWORD`, `change-me` by default: change it before
+deploying). It switches failures on and off for this agent (slow or failing `/messages`, Gemini, Registry, Identity,
+Observability) and for the mock agents. Switches live in Redis, so every replica sees them; they only work with
+`FAULTS_ENABLED=true`. Ask a question afterwards and open its trace to see retry, failover and fallbacks.
+Container-level failures (crawler, processor) are listed on the page as `docker compose` commands.
+
+`backend/tests/integration/test_faults_spec9.py` has one test per row of the §9 table.
 
 ### Gemini API key (optional)
 
@@ -125,6 +135,8 @@ backend/app/
 frontend/src/
   app/news/                              # /news (crawl grid, search, results) and /news/[id]
   app/ask/                               # ask a question, see which agents answered
+  app/page.tsx  messages/  traces/[id]/  # overview with metrics; message log; trace waterfall
+  app/network/  faults/  login/          # agent graph and test messages; fault lab; admin login
   components/  lib/api.ts                # UI pieces; typed server-side client for agent-api
 docs/adr/                                # architecture decision records
 ```
@@ -140,6 +152,6 @@ remote adapters.
 | 1. Finish M1 | CI, integration tests, Next.js shell, `/news` | ✅ Done |
 | 2. AI & knowledge | Gemini embeddings, hybrid search, `news_summary`, `sentiment`, `trending_topics` with non-LLM fallbacks | ✅ Done (Gemini calls not yet tried with a real key) |
 | 3. Coordination | Mock agents (finance ×2, weather), `AgentClient` (retry, failover), coordinator, planner, `/ask`, knowledge memory | ✅ Done |
-| 4. Reliability & observability | Fault injection, spec §9 fault tests, metrics, admin login, `/`, `/messages` + traces, `/network`, `/faults` | ⏳ |
+| 4. Reliability & observability | Fault injection, spec §9 fault tests, metrics, admin login, `/`, `/messages` + traces, `/network`, `/faults` | ✅ Done |
 | 5. Demo ready | Scripted run of the 7 demo scenarios (spec §12), `docs/contract.md` | ⏳ |
 | Later | Remote adapters for Teams 1–4, public deployment, real cross-team runs | — |

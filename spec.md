@@ -149,7 +149,7 @@ trong mạng Agent của cả lớp. Agent:
 | UI | Tailwind CSS + shadcn/ui | Nhanh, đẹp |
 | Data fetching | TanStack Query | Cache, polling cho dashboard realtime |
 | Biểu đồ | Recharts | Latency, sentiment theo thời gian |
-| Graph mạng agent | React Flow | Vẽ topology agent |
+| Graph mạng agent | SVG tự vẽ (bố cục hình tròn) | Ít agent nên không cần thư viện React Flow |
 | Type FE↔BE | `openapi-typescript` sinh type từ OpenAPI | Không lệch schema |
 | Container | Docker + Docker Compose | Chạy cả hệ bằng một lệnh |
 | Reverse proxy | Caddy | HTTPS tự động khi deploy public |
@@ -377,10 +377,10 @@ Chỉ lưu tiêu đề, tóm tắt, nội dung phục vụ tìm kiếm nội b�
 | Agent đích down | ConnectError / 5xx sau retry | Failover sang agent khác cùng capability | Tắt mock agent |
 | Không còn agent nào | Danh sách rỗng | Trả **partial result** + `missing: [capability]` | Tắt hết Finance agent |
 | Registry down | Lỗi kết nối Team 1 | Dùng `agent_cache` hoặc Redis cache | Đổi `base_url` sai |
-| Broker down | Lỗi Team 2 | Fallback gọi HTTP trực tiếp nếu biết endpoint | Tắt broker |
-| Identity down | Lỗi Team 3 | Dùng token còn hạn trong cache; validate bằng cache ngắn 60 giây | — |
+| Broker down | Lỗi Team 2 | Fallback gọi HTTP trực tiếp nếu biết endpoint | Chưa áp dụng: adapter local đã là HTTP trực tiếp |
+| Identity down | Lỗi Team 3 | Token đã validate trong 60 giây qua vẫn được nhận (cache Redis); token lạ bị từ chối | Fault lab |
 | Token giả / hết hạn / `from` giả | validate fail | 401, log `msg.rejected` | `send.py --bad-token` |
-| Observability down | Lỗi Team 4 | Vẫn ghi `trace_events` local, buffer rồi đẩy lại | — |
+| Observability down | Lỗi Team 4 | Vẫn ghi `trace_events` local (buffer đẩy lại: khi có adapter Team 4) | Fault lab |
 | LLM lỗi / chậm | Exception / timeout | Fallback: summary trích xuất câu đầu; sentiment từ điển | Đặt API key sai |
 | Crawler chết | `last_crawled_at` quá 30 phút | `status=degraded`, trả dữ liệu cũ kèm `freshness` | Dừng container crawler |
 | Processor crash giữa chừng | Message còn trong pending list | `XAUTOCLAIM` giao lại message chưa ack; upsert đảm bảo idempotent | `docker kill processor` |
@@ -412,7 +412,7 @@ Chỉ lưu tiêu đề, tóm tắt, nội dung phục vụ tìm kiếm nội b�
 | Tổng quan | `/` | Trạng thái agent, 4 ô hạ tầng (local/remote, OK/lỗi), metrics chính, biểu đồ latency, số bài crawl 24 giờ, nút crawl ngay |
 | Tin tức | `/news` | Feed mới nhất, ô tìm kiếm (keyword/semantic/hybrid), lọc nguồn/ngày/sentiment; trang chi tiết bài |
 | Hỏi agent | `/ask` | Chat: nhập câu hỏi → hiện trả lời + các agent đã gọi + link tới trace |
-| Mạng agent | `/network` | Graph React Flow: các agent discover được, capability, status; nút "gửi thử" |
+| Mạng agent | `/network` | Sơ đồ SVG (không dùng React Flow): các agent discover được, capability, message; nút "gửi thử" |
 | Nhật ký message + Trace | `/messages`, `/traces/[id]` | Bảng inbox/outbox, lọc theo trạng thái/peer/capability; timeline waterfall một trace |
 | Fault lab | `/faults` | (dev) Bật/tắt fault giả lập để demo M6 |
 
